@@ -46,7 +46,7 @@ tokens = list(keywords.values()) + [
         'GT',
 ]
 
-t_REALNUM = r'\d*\.\d+|\d+\.\d*'
+t_REALNUM = r'\d*\.\d+e\-\d+|\d*\.\d+e\d+|\d+\.\d*e\-\d+|\d+\.\d*e\d+|\d*\.\d+|\d+\.\d*'
 t_INTNUM  = r'\d+'
 t_PLUS    = r'\+'
 t_MINUS   = r'-'
@@ -76,8 +76,6 @@ t_GT      = r'>'
 def t_NAME(t):
         r'[a-zA-Z_][a-zA-Z_0-9]*'
         t.type = keywords.get(t.value,'NAME')
-        if t.type == 'NAME':
-                raise SyntaxException
         return t
 
 def t_newline(t):
@@ -232,7 +230,7 @@ class MidOpDoubleExpr(Expr):
                                 if R == 0:
                                         raise SemanticException
 
-                                return float(L + R)
+                                return float(L / R)
                         elif self.op == 'div':
                                 if R == 0:
                                         raise SemanticException
@@ -268,6 +266,8 @@ class MidOpDoubleExpr(Expr):
                                 return (L > R)
                         elif self.op == '+':
                                 return (L + R)
+                        elif self.op == 'in':
+                                return (L in R)
                         else:
                                 raise SemanticException
                 elif (isinstance(L, list) and isinstance(R, list)):
@@ -304,7 +304,7 @@ class IndexingExpr(Expr):
                 if len(I) != 1:
                         raise SemanticException
                 I = I[0]
-                if I >= len(O):
+                if I >= len(O) or I < 0:
                         raise SemanticException
                 return O[I]
 
@@ -317,11 +317,12 @@ class TupleIndexingExpr(Expr):
         def evaluate(self):
                 T = self.tup.evaluate()
                 I = self.idx.evaluate()
+                I = I - 1
                 if not isinstance(T, tuple):
                         raise SemanticException
                 if not isinstance(I, int):
                         raise SemanticException
-                if I >= len(T):
+                if I >= len(T) or I < 0:
                         raise SemanticException
                 return T[I]
 
@@ -484,11 +485,6 @@ if __name__ == '__main__':
                                 print('SYNTAX ERROR')
         else:
                 for expr in file.readlines():
-                        try:
-                                print(parser.parse(expr).evaluate())
-                        except SemanticException:
-                                print('SEMANTIC ERROR')
-                        except SyntaxException:
-                                print('SYNTAX ERROR') 
+                        print(parser.parse(expr).evaluate())
                 
                 
