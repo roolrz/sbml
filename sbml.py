@@ -495,13 +495,16 @@ precedence = (
 )
 
 def p_program(p):
-        ''' program : block '''
+        ' program : block '
         p[0] = p[1] 
 
 def p_blocks(p):
-        ''' block : LBLOCK statements RBLOCK 
-                | LBLOCK RBLOCK'''
+        ' block : LBLOCK statements RBLOCK '
         p[0] = Block(p[2])
+
+def p_blocks_empty(p):
+        ' block : LBLOCK RBLOCK '
+        p[0] = Block([])
 
 def p_statements(p):
         ''' statements : statement statements 
