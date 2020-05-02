@@ -10,15 +10,60 @@ class SyntaxException(Exception):
 class SemanticException(Exception):
         pass
 
+class NameException(Exception):
+        pass
+
+class VariableBuilder:
+        def __init__(self):
+                self.table = {}
+
+        def check(self, name):
+                if not isinstance(name, str):
+                        raise NameException
+                if name in self.table:
+                        return True
+                else:
+                        return False
+
+        def delete(self, name):
+                if not isinstance(name, str):
+                        raise NameException
+                if name in self.table:
+                        self.table.pop(name, None)
+                        return True
+                else:
+                        return False
+
+        def read(self, name):
+                if self.check(name):
+                        return self.table[name]
+                else:
+                        return None
+
+        def write(self, name, value):
+                if self.check(name):
+                        self.delete(name)
+                        self.table[name] = value
+                else:
+                        self.table[name] = value
+                return True
+                
+global varTable
+varTable = VariableBuilder()
+
 keywords = {
-        'True' : 'TRUE',
-        'False' : 'FALSE',
-        'div' : 'DIV',
-        'mod' : 'MOD',
-        'in' : 'IN',
-        'not' : 'NOT',
-        'andalso' : 'ANDALSO',
-        'orelse' : 'ORELSE',
+        'True'          : 'TRUE',
+        'False'         : 'FALSE',
+        'div'           : 'DIV',
+        'mod'           : 'MOD',
+        'in'            : 'IN',
+        'not'           : 'NOT',
+        'andalso'       : 'ANDALSO',
+        'orelse'        : 'ORELSE',
+        'print'         : 'PRINT',
+        'if'            : 'IF',
+        'else'          : 'ELSE',
+        'while'         : 'WHILE', 
 }
 
 tokens = list(keywords.values()) + [
@@ -36,6 +81,8 @@ tokens = list(keywords.values()) + [
         'RPAREN',
         'LBRACKET',
         'RBRACKET',
+        'LBLOCK',
+        'RBLOCK',
         'COMMA',
         'CONS',
         'LT',
@@ -44,6 +91,8 @@ tokens = list(keywords.values()) + [
         'NEQ',
         'GEQ',
         'GT',
+        'ASSIGN',
+        'SEMICOLON'
 ]
 
 t_REALNUM = r'\d*\.\d+e\-\d+|\d*\.\d+e\d+|\d+\.\d*e\-\d+|\d+\.\d*e\d+|\d*\.\d+|\d+\.\d*'
@@ -64,6 +113,8 @@ t_LPAREN  = r'\('
 t_RPAREN  = r'\)'
 t_LBRACKET= r'\['
 t_RBRACKET= r'\]'
+t_LBLOCK  = r'\{'
+t_RBLOCK  = r'\}'
 t_COMMA   = r','
 t_CONS    = r'::'
 t_LT      = r'<'
@@ -72,6 +123,8 @@ t_EQU     = r'=='
 t_NEQ     = r'<>'
 t_GEQ     = r'>='
 t_GT      = r'>'
+t_ASSIGN  = r'='
+t_SEMICOLON = ';'
 
 def t_NAME(t):
         r'[a-zA-Z_][a-zA-Z_0-9]*'
@@ -89,11 +142,108 @@ def t_error(t):
         t.lexer.skip(1)
 
 # Parser start here
+class Statement:
+        def __init__(self):
+                pass
+        def execute(self):
+                return 0
+
+class Block(Statement):
+        def __init__(self, statements):
+                self.statements = statements
+
+        def execute(self):
+                for statement in self.statements:
+                        statement.execute()
+
+class PrintStatement(Statement):
+        def __init__(self, obj):
+                self.obj = obj
+        
+        def execute(self):
+                V = self.obj.evaluate()
+                print(V)
+
+class AssignStatement(Statement):
+        def __init__(self, name, val):
+                self.name = name
+                self.val = val
+
+        def execute(self):
+                V = self.val.evaluate()
+                varTable.write(self.name, V)
+
+class AssignListElemStatement(Statement):
+        def __init__(self, name, idx, value):
+                self.name = name
+                self.idx = idx
+                self.value = value
+        
+        def execute(self):
+                N = varTable.read(self.name)
+                V = self.value.evaluate()
+                I = self.idx.evaluate()
+                if not isinstance(N, list):
+                        raise SemanticException
+                if not isinstance(I, list):
+                        raise SemanticException
+                if len(I) != 1:
+                        raise SemanticException
+                I = I[0]
+                if I >= len(N) or I < 0 or (not isinstance(I, int)):
+                        raise SemanticException
+                N[I] = V
+                varTable.write(self.name, N)
+
+class IfStatement(Statement):
+        def __init__(self, condition, blk):
+                self.condition = condition
+                self.blk = blk
+        
+        def execute(self):
+                if  self.condition.evaluate() == True:
+                        self.blk.execute()
+
+class IfElseStatement(Statement):
+        def __init__(self, condition, blk, else_blk):
+                self.condition = condition
+                self.blk = blk
+                self.else_blk = else_blk
+        
+        def execute(self):
+                if self.condition.evaluate() == True:
+                        self.blk.execute()
+                else:
+                        self.else_blk.execute()
+
+class WhileLoopStatement(Statement):
+        def __init__(self, condition, blk):
+                self.condition = condition
+                self.blk = blk
+        
+        def execute(self):
+                while self.condition.evaluate() != False:
+                        self.blk.execute()
+                
+
 class Expr:
         def __init__(self):
                 pass
         def evaluate(self):
                 return 0
+        def execute(self):
+                pass
+
+class NameExpr(Expr):
+        def __init__(self, name):
+                self.name = name
+        
+        def evaluate(self):
+                ret = varTable.read(self.name)
+                if ret == None:
+                        raise NameException
+                else:
+                        return ret
 
 class UminusNumExpr(Expr):
         def __init__(self, value):
@@ -304,7 +454,7 @@ class IndexingExpr(Expr):
                 if len(I) != 1:
                         raise SemanticException
                 I = I[0]
-                if I >= len(O) or I < 0:
+                if I >= len(O) or I < 0 or isinstance(I, bool):
                         raise SemanticException
                 return O[I]
 
@@ -327,6 +477,7 @@ class TupleIndexingExpr(Expr):
                 return T[I]
 
 precedence = (
+        ('left', 'ASSIGN'),
         ('left', 'ORELSE'),
         ('left', 'ANDALSO'),
         ('left', 'NOT'),
@@ -343,8 +494,58 @@ precedence = (
         ('left', 'LPAREN', 'RPAREN'),
 )
 
+def p_program(p):
+        ''' program : block '''
+        p[0] = p[1] 
+
+def p_blocks(p):
+        ''' block : LBLOCK statements RBLOCK 
+                | LBLOCK RBLOCK'''
+        p[0] = Block(p[2])
+
+def p_statements(p):
+        ''' statements : statement statements 
+                        | statement '''
+        try:
+                p[0] = [p[1]]+ p[2]
+        except IndexError:
+                p[0] = [p[1]]
+
+def p_statement(p):
+        ''' statement : assign_statement
+                        | print_statement  
+                        | if_statement 
+                        | if_else_statement 
+                        | while_loop_statement '''
+        p[0] = p[1]
+
+def p_assign_statement(p):
+        ''' assign_statement : NAME ASSIGN expression SEMICOLON'''
+        p[0] = AssignStatement(p[1], p[3])
+
+def p_assign_statement_list(p):
+        ''' assign_statement : NAME list_expr ASSIGN expression SEMICOLON'''
+        p[0] = AssignListElemStatement(p[1], p[2], p[4])
+
+def p_print_statement(p):
+        ' print_statement : PRINT LPAREN expression RPAREN SEMICOLON'
+        p[0] = PrintStatement(p[3])
+
+def p_if_statement(p):
+        ' if_statement : IF LPAREN expression RPAREN block'
+        p[0] = IfStatement(p[3], p[5])
+
+def p_if_else_statement(p):
+        ' if_else_statement : IF LPAREN expression RPAREN block ELSE block'
+        p[0] = IfElseStatement(p[3], p[5], p[7])
+
+def p_while_loop_statement(p):
+        ' while_loop_statement : WHILE LPAREN expression RPAREN block '
+        p[0] = WhileLoopStatement(p[3], p[5])
+
 def p_expression(p):
         ''' expression : number_expr
+                        | name_expr
                         | uminus_expr
                         | boolean_expr
                         | string_expr
@@ -354,13 +555,12 @@ def p_expression(p):
                         | lop_single_expr 
                         | midop_double_expr 
                         | indexing_expr
-                        | tuple_indexing_expr 
-                        | name_expr '''
+                        | tuple_indexing_expr '''
         p[0] = p[1]
 
 def p_name_expr(p):
-        'name_expr : NAME'
-        raise SyntaxException
+        ' name_expr : NAME '
+        p[0] = NameExpr(p[1])
 
 def p_uminus_expr(p):
         'uminus_expr : MINUS expression %prec UMINUS'
@@ -445,7 +645,7 @@ def p_indexing_expr(p):
         p[0] = IndexingExpr(p[1], p[2])
 
 def p_tuple_indexing_expr(p):
-        'tuple_indexing_expr : HASHTAG number_expr tuple_expr'
+        'tuple_indexing_expr : HASHTAG number_expr expression'
         p[0] = TupleIndexingExpr(p[2], p[3])
 
 def p_error(p):
@@ -478,13 +678,25 @@ if __name__ == '__main__':
                                 lexer.input(expr)
                                 for token in lexer:
                                         print(token)
-                                print("Result: ", parser.parse(expr).evaluate())
+                                parser.parse(expr).execute()
                         except SemanticException:
                                 print('SEMANTIC ERROR')
                         except SyntaxException:
                                 print('SYNTAX ERROR')
+                        except NameException:
+                                print('UNDEFINED VARIABLE')
         else:
-                for expr in file.readlines():
-                        print(parser.parse(expr).evaluate())
+                exprs = file.read()
+                exprs = ''.join(exprs)
+                try:
+                        parser.parse(exprs).execute()
+                except SemanticException:
+                        print('SEMANTIC ERROR')
+                except SyntaxException:
+                        print('SYNTAX ERROR')
+                except NameException:
+                        print('SYNTAX ERROR')
+
+        file.close()
                 
                 
