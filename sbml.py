@@ -47,9 +47,50 @@ class VariableBuilder:
                 else:
                         self.table[name] = value
                 return True
-                
+
+class privateVaritableBuilder:
+        def __init__(self, globalScope):
+                self.globalScope = globalScope
+                self.table = {}
+
+        def check(self, name):
+                if not isinstance(name, str):
+                        raise NameException
+                if name in self.table:
+                        return self.table
+                elif self.globalScope.check(name):
+                        return self.globalScope.table
+                else:
+                        return None
+
+        def delete(self, name, scope):
+                if not isinstance(name, str):
+                        raise NameException
+                if name in scope:
+                        scope.pop(name, None)
+                        return True
+                else:
+                        return False
+
+        def read(self, name):
+                pos = self.check(name)
+                if pos:
+                        return pos[name]
+                else:
+                        return None
+
+        def write(self, name, value):
+                pos = self.check(name)
+                if pos:
+                        pos[name] = value
+                else:
+                        self.table[name] = value
+
 global varTable
 varTable = VariableBuilder()
+
+global funTable
+funTable = {}
 
 keywords = {
         'True'          : 'TRUE',
@@ -64,6 +105,7 @@ keywords = {
         'if'            : 'IF',
         'else'          : 'ELSE',
         'while'         : 'WHILE', 
+        'fun'           : 'FUNCTION',
 }
 
 tokens = list(keywords.values()) + [
@@ -138,6 +180,7 @@ def t_newline(t):
 t_ignore  = ' \t'
 
 def t_error(t):
+        #print("syntax error at '%s'" % t)
         raise SyntaxException
         t.lexer.skip(1)
 
@@ -148,20 +191,53 @@ class Statement:
         def execute(self):
                 return 0
 
+class Function:
+        def __init__(self, funName, blk, returnName, para = None):
+                self.block = blk
+                self.funName = funName
+                self.returnName = returnName
+                self.para = para
+                self.__check()
+
+        def __check(self):
+                if not isinstance(self.returnName, str):
+                        raise SemanticException
+
+                if not isinstance(self.funName, str):
+                        raise SemanticException
+                
+                funTable[self.funName] = self
+
+        def evaluate(self, para = None):
+                newScope = privateVaritableBuilder(varTable)
+
+                if self.para != None or para != None:
+                        if len(self.para) != len(para):
+                                raise SemanticException
+                        for i in range(len(self.para)):
+                                newScope.write(self.para[i], para[i])
+
+                self.block.execute(newScope)
+                if newScope.read(self.returnName):
+                        return newScope.read(self.returnName)
+                else:
+                        raise SemanticException
+
+
 class Block(Statement):
         def __init__(self, statements):
                 self.statements = statements
 
-        def execute(self):
+        def execute(self, scope = varTable):
                 for statement in self.statements:
-                        statement.execute()
+                        statement.execute(scope)
 
 class PrintStatement(Statement):
         def __init__(self, obj):
                 self.obj = obj
         
-        def execute(self):
-                V = self.obj.evaluate()
+        def execute(self, scope):
+                V = self.obj.evaluate(scope)
                 print(V)
 
 class AssignStatement(Statement):
@@ -169,9 +245,9 @@ class AssignStatement(Statement):
                 self.name = name
                 self.val = val
 
-        def execute(self):
-                V = self.val.evaluate()
-                varTable.write(self.name, V)
+        def execute(self, scope):
+                V = self.val.evaluate(scope)
+                scope.write(self.name, V)
 
 class AssignListElemStatement(Statement):
         def __init__(self, name, idx, value):
@@ -179,10 +255,10 @@ class AssignListElemStatement(Statement):
                 self.idx = idx
                 self.value = value
         
-        def execute(self):
-                N = varTable.read(self.name)
-                V = self.value.evaluate()
-                I = self.idx.evaluate()
+        def execute(self, scope):
+                N = scope.read(self.name)
+                V = self.value.evaluate(scope)
+                I = self.idx.evaluate(scope)
                 if not isinstance(N, list):
                         raise SemanticException
                 if not isinstance(I, list):
@@ -193,16 +269,16 @@ class AssignListElemStatement(Statement):
                 if I >= len(N) or I < 0 or (not isinstance(I, int)):
                         raise SemanticException
                 N[I] = V
-                varTable.write(self.name, N)
+                scope.write(self.name, N)
 
 class IfStatement(Statement):
         def __init__(self, condition, blk):
                 self.condition = condition
                 self.blk = blk
         
-        def execute(self):
-                if  self.condition.evaluate() == True:
-                        self.blk.execute()
+        def execute(self, scope):
+                if  self.condition.evaluate(scope) == True:
+                        self.blk.execute(scope)
 
 class IfElseStatement(Statement):
         def __init__(self, condition, blk, else_blk):
@@ -210,20 +286,20 @@ class IfElseStatement(Statement):
                 self.blk = blk
                 self.else_blk = else_blk
         
-        def execute(self):
-                if self.condition.evaluate() == True:
-                        self.blk.execute()
+        def execute(self, scope):
+                if self.condition.evaluate(scope) == True:
+                        self.blk.execute(scope)
                 else:
-                        self.else_blk.execute()
+                        self.else_blk.execute(scope)
 
 class WhileLoopStatement(Statement):
         def __init__(self, condition, blk):
                 self.condition = condition
                 self.blk = blk
         
-        def execute(self):
-                while self.condition.evaluate() != False:
-                        self.blk.execute()
+        def execute(self, scope):
+                while self.condition.evaluate(scope) != False:
+                        self.blk.execute(scope)
                 
 
 class Expr:
@@ -234,12 +310,30 @@ class Expr:
         def execute(self):
                 pass
 
+class FunExpr(Expr):
+        def __init__(self, funName, para = None):
+                self.funName = funName
+                self.para = para
+        
+        def evaluate(self, scope):
+                if self.funName not in funTable:
+                        raise SyntaxException
+
+                para = []
+                if self.para == None:
+                        return funTable[self.funName].evaluate()
+                        
+                for item in self.para:
+                        para.append(item.evaluate(scope))
+
+                return funTable[self.funName].evaluate(para)
+
 class NameExpr(Expr):
         def __init__(self, name):
                 self.name = name
         
-        def evaluate(self):
-                ret = varTable.read(self.name)
+        def evaluate(self, scope):
+                ret = scope.read(self.name)
                 if ret == None:
                         raise NameException
                 else:
@@ -249,8 +343,8 @@ class UminusNumExpr(Expr):
         def __init__(self, value):
                 self.value = value
 
-        def evaluate(self):
-                V = self.value.evaluate()
+        def evaluate(self, scope):
+                V = self.value.evaluate(scope)
                 if isinstance(V, (int, float)):
                         return -V
                 else:
@@ -260,7 +354,7 @@ class NumExpr(Expr):
         def __init__(self, value):
                 self.value = value
 
-        def evaluate(self):
+        def evaluate(self, scope):
                 if isinstance(self.value, str):
                         try:
                                 V = int(self.value)
@@ -274,14 +368,14 @@ class StringExpr(Expr):
         def __init__(self, value):
                 self.value = value
         
-        def evaluate(self):
+        def evaluate(self, scope):
                 return self.value
 
 class BoolExpr(Expr):
         def __init__(self, value):
                 self.value = value
         
-        def evaluate(self):
+        def evaluate(self, scope):
                 if self.value == 'True':
                         return True
                 elif self.value == 'False':
@@ -294,18 +388,18 @@ class TupleExpr(Expr):
                 self.value = value
                 self.value_extra = value_extra
 
-        def evaluate(self):
+        def evaluate(self, scope):
                 if self.value_extra == None:
-                        return (self.value.evaluate(),)
-                V = self.value.evaluate()
-                VE = self.value_extra.evaluate()
+                        return (self.value.evaluate(scope),)
+                V = self.value.evaluate(scope)
+                VE = self.value_extra.evaluate(scope)
                 return (V,) + VE
 
 class EmptyListExpr(Expr):
         def __init__(self):
                 self.empty = 1
         
-        def evaluate(self):
+        def evaluate(self, scope):
                 return []
 
 class ListExpr(Expr):
@@ -313,27 +407,27 @@ class ListExpr(Expr):
                 self.value = value
                 self.following = following
 
-        def evaluate(self):
+        def evaluate(self, scope):
                 if self.following == None:
-                        return [self.value.evaluate()]
-                V = self.value.evaluate()
-                return [V]+self.following.evaluate()
+                        return [self.value.evaluate(scope)]
+                V = self.value.evaluate(scope)
+                return [V]+self.following.evaluate(scope)
 
 
 class ParenExpr(Expr):
         def __init__(self, value):
                 self.value = value
         
-        def evaluate(self):
-                return self.value.evaluate()
+        def evaluate(self, scope):
+                return self.value.evaluate(scope)
 
 class LOpSingleExpr(Expr):
         def __init__(self, op, value):
                 self.op = op
                 self.value = value
 
-        def evaluate(self):
-                V = self.value.evaluate()
+        def evaluate(self, scope):
+                V = self.value.evaluate(scope)
 
                 if self.op == 'not':
                         if isinstance(V, bool):
@@ -346,9 +440,9 @@ class MidOpDoubleExpr(Expr):
                 self.rvalue = rvalue
                 self.op = op
 
-        def evaluate(self):
-                L = self.lvalue.evaluate()
-                R = self.rvalue.evaluate()
+        def evaluate(self, scope):
+                L = self.lvalue.evaluate(scope)
+                R = self.rvalue.evaluate(scope)
 
                 if (isinstance(L, bool) and isinstance(R, bool)):
                         if self.op == 'orelse':
@@ -444,9 +538,9 @@ class IndexingExpr(Expr):
                 self.obj = obj
                 self.idx = idx
         
-        def evaluate(self):
-                O = self.obj.evaluate()
-                I = self.idx.evaluate()
+        def evaluate(self, scope):
+                O = self.obj.evaluate(scope)
+                I = self.idx.evaluate(scope)
                 if not isinstance(O, (str, list)):
                         raise SemanticException
                 if not isinstance(I, list):
@@ -464,9 +558,9 @@ class TupleIndexingExpr(Expr):
                 self.idx = idx
                 self.tup = tup
         
-        def evaluate(self):
-                T = self.tup.evaluate()
-                I = self.idx.evaluate()
+        def evaluate(self, scope):
+                T = self.tup.evaluate(scope)
+                I = self.idx.evaluate(scope)
                 I = I - 1
                 if not isinstance(T, tuple):
                         raise SemanticException
@@ -494,15 +588,43 @@ precedence = (
         ('left', 'LPAREN', 'RPAREN'),
 )
 
-def p_program(p):
+def p_progran_withfun(p):
+        ' program : functions block'
+        p[0] = p[2]
+
+def p_program_nofun(p):
         ' program : block '
         p[0] = p[1] 
 
-def p_blocks(p):
+def p_functions(p):
+        ''' functions : function functions 
+                        | function '''
+
+def p_function_nopara(p):
+        ' function : FUNCTION NAME LPAREN RPAREN ASSIGN block NAME SEMICOLON '
+        Function(p[2], p[6], p[7])
+
+def p_function_withpara(p):
+        ' function : FUNCTION NAME LPAREN NAME function_withpara_tail'
+        Function(p[2], p[5]['blk'], p[5]['ret'], para = [p[4]] + p[5]['para'])
+
+def p_function_withpara_tail_1(p):
+        ' function_withpara_tail : COMMA NAME function_withpara_tail '
+        p[3]['para'] = [p[2]] + p[3]['para']
+        p[0] = p[3]
+
+def p_function_withpara_tail_2(p):
+        ' function_withpara_tail : RPAREN ASSIGN block NAME SEMICOLON '
+        p[0] = {}
+        p[0]['para'] = []
+        p[0]['ret'] = p[4]
+        p[0]['blk'] = p[3]
+
+def p_block(p):
         ' block : LBLOCK statements RBLOCK '
         p[0] = Block(p[2])
 
-def p_blocks_empty(p):
+def p_block_empty(p):
         ' block : LBLOCK RBLOCK '
         p[0] = Block([])
 
@@ -558,12 +680,29 @@ def p_expression(p):
                         | lop_single_expr 
                         | midop_double_expr 
                         | indexing_expr
-                        | tuple_indexing_expr '''
+                        | tuple_indexing_expr 
+                        | function_call_expr '''
         p[0] = p[1]
 
 def p_name_expr(p):
         ' name_expr : NAME '
         p[0] = NameExpr(p[1])
+
+def p_function_call_expr_nopara(p):
+        ' function_call_expr : NAME LPAREN RPAREN '
+        p[0] = FunExpr(p[1])
+
+def p_function_call_expr_multipara(p):
+        ' function_call_expr : NAME LPAREN expression function_call_expr_tail '
+        p[0] = FunExpr(p[1], para = [p[3]] + p[4])
+
+def p_function_call_expr_tail_1(p):
+        ' function_call_expr_tail : COMMA expression function_call_expr_tail '
+        p[0] = [p[2]] + p[3]
+
+def p_function_call_expr_tail_2(p):
+        ' function_call_expr_tail : RPAREN '
+        p[0] = []
 
 def p_uminus_expr(p):
         'uminus_expr : MINUS expression %prec UMINUS'
@@ -652,7 +791,7 @@ def p_tuple_indexing_expr(p):
         p[0] = TupleIndexingExpr(p[2], p[3])
 
 def p_error(p):
-        #print("Semantic error at '%s'" % p)
+        # print("Semantic error at '%s'" % p)
         raise SyntaxException
         
 
@@ -677,17 +816,10 @@ if __name__ == '__main__':
                                 print("Received Ctrl+D, Exiting...")
                                 exit()
 
-                        try:
-                                lexer.input(expr)
-                                for token in lexer:
-                                        print(token)
-                                parser.parse(expr).execute()
-                        except SemanticException:
-                                print('SEMANTIC ERROR')
-                        except SyntaxException:
-                                print('SYNTAX ERROR')
-                        except NameException:
-                                print('UNDEFINED VARIABLE')
+                        lexer.input(expr)
+                        for token in lexer:
+                                print(token)
+                        parser.parse(expr).execute()
         else:
                 exprs = file.read()
                 exprs = ''.join(exprs)
