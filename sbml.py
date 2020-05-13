@@ -48,44 +48,6 @@ class VariableBuilder:
                         self.table[name] = value
                 return True
 
-class privateVaritableBuilder:
-        def __init__(self, globalScope):
-                self.globalScope = globalScope
-                self.table = {}
-
-        def check(self, name):
-                if not isinstance(name, str):
-                        raise NameException
-                if name in self.table:
-                        return self.table
-                elif self.globalScope.check(name):
-                        return self.globalScope.table
-                else:
-                        return None
-
-        def delete(self, name, scope):
-                if not isinstance(name, str):
-                        raise NameException
-                if name in scope:
-                        scope.pop(name, None)
-                        return True
-                else:
-                        return False
-
-        def read(self, name):
-                pos = self.check(name)
-                if pos:
-                        return pos[name]
-                else:
-                        return None
-
-        def write(self, name, value):
-                pos = self.check(name)
-                if pos:
-                        pos[name] = value
-                else:
-                        self.table[name] = value
-
 global varTable
 varTable = VariableBuilder()
 
@@ -209,7 +171,7 @@ class Function:
                 funTable[self.funName] = self
 
         def evaluate(self, para = None):
-                newScope = privateVaritableBuilder(varTable)
+                newScope = VariableBuilder()
 
                 if self.para != None or para != None:
                         if len(self.para) != len(para):
@@ -218,7 +180,8 @@ class Function:
                                 newScope.write(self.para[i], para[i])
 
                 self.block.execute(newScope)
-                if newScope.read(self.returnName):
+                table = newScope.table
+                if self.returnName in table:
                         return newScope.read(self.returnName)
                 else:
                         raise SemanticException
