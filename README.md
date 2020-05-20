@@ -11,7 +11,7 @@ python3 sbml.py "path to program"<br />
 # Program Syntax
 
 ## Variables
-Variables must be fit in the regure expression '[a-zA-Z][a-zA-Z0-9_]' and should not be any keyword pre-defined in the program
+Variables must be fit in the regular expression '[a-zA-Z][a-zA-Z0-9_]' and should not be any keyword pre-defined in the program
 
 ## Expression
 Expressions are those can be evaluated value. Function calls, Variables with value assigned, list, tuple, list indexing, tuple indexing... These can be expressions
@@ -22,7 +22,7 @@ Statement don't have a value. If you assign a statement to a variable, you'll go
 The syntax of statement is assign_statement, print_statement, if_statement, if_else_statement or while_loop_statement. There must be a semicolon ';' at the end of print statement or assignment.
 
 ## Data tpyes
-The data type accept list, tuple, float, int, boolean. It's basically share the same syntax to the Python, only the basic usage of python. Usage like list[1:-1] is not supported.
+The data type accept list, tuple, float, int, string, boolean. It's basically share the same syntax to the Python, only the basic usage of python. Usage like list[1:-1] is not supported.
 
 One thing need to noticed is that the indexing expression of tuple, we use #i(tuple_name) for the indexing operation. Also index is the *REAL* index, which means tuple_name[0] in python equals to #1(tuple_name) in sbml.
 
