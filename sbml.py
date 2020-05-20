@@ -154,20 +154,14 @@ class Statement:
                 return 0
 
 class Function:
-        def __init__(self, funName, blk, returnName, para = None):
+        def __init__(self, funName, blk, returnExpr, para = None):
                 self.block = blk
                 self.funName = funName
-                self.returnName = returnName
+                self.returnExpr = returnExpr
                 self.para = para
                 self.__check()
 
-        def __check(self):
-                if not isinstance(self.returnName, str):
-                        raise SemanticException
-
-                if not isinstance(self.funName, str):
-                        raise SemanticException
-                
+        def __check(self):                
                 funTable[self.funName] = self
 
         def evaluate(self, para = None):
@@ -180,11 +174,7 @@ class Function:
                                 newScope.write(self.para[i], para[i])
 
                 self.block.execute(newScope)
-                table = newScope.table
-                if self.returnName in table:
-                        return newScope.read(self.returnName)
-                else:
-                        raise SemanticException
+                return self.returnExpr.evaluate(newScope)
 
 
 class Block(Statement):
@@ -564,7 +554,7 @@ def p_functions(p):
                         | function '''
 
 def p_function_nopara(p):
-        ' function : FUNCTION NAME LPAREN RPAREN ASSIGN block NAME SEMICOLON '
+        ' function : FUNCTION NAME LPAREN RPAREN ASSIGN block expression SEMICOLON '
         Function(p[2], p[6], p[7])
 
 def p_function_withpara(p):
@@ -577,7 +567,7 @@ def p_function_withpara_tail_1(p):
         p[0] = p[3]
 
 def p_function_withpara_tail_2(p):
-        ' function_withpara_tail : RPAREN ASSIGN block NAME SEMICOLON '
+        ' function_withpara_tail : RPAREN ASSIGN block expression SEMICOLON '
         p[0] = {}
         p[0]['para'] = []
         p[0]['ret'] = p[4]
